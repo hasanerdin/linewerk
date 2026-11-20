@@ -1,0 +1,27 @@
+# Raw data, Delta lake, streaming checkpoints: never committed (Kaggle rules)
+data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Spark local artefacts
+spark-warehouse/
+metastore_db/
+derby.log
+*.crc
+
+# Databricks bundle local state
+.databricks/
+
+# Secrets and OS / editor files
+.env
+.DS_Store
+.idea/
+.vscode/
