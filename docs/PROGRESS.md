@@ -5,7 +5,7 @@
 
 ## Current position
 
-- **Next session:** W1S1 (continued) — Java 17, uv project, Spark + Delta smoke test, Kafka
+- **Next session:** W1S1 (finish: Kafka in Docker, ~45 min) → W1S2 — Spark DataFrame fundamentals and lazy evaluation
 - **Week:** 1 of 6 — Setup, Spark fundamentals, data profiling
 - **Plan status:** on track
 - **Started:** 2026-11-20 · **Target finish:** ~2026-12-31 (may stretch to 7 weeks over Christmas)
@@ -39,14 +39,17 @@
 
 > Concepts to revisit in recall checks until they are solid.
 
-- Databricks Free Edition constraints (serverless only, streaming only with AvailableNow, no outbound access to local Kafka) — not to be confused with paid trials
 - Why Spark runs natively on macOS: Docker runs inside a Linux VM that reserves RAM; native leaves 8–10 GB for the driver
+- Spark memory in local mode: spark.driver.memory is the whole budget; ~300 MB reserved, ~60% of the rest is the unified execution/storage pool; must be set before the JVM starts
+- Driver and executor share one JVM in local[*]; tasks run in parallel as threads (one per core), not one after another
 
 ## Parking lot
 
 > Good ideas and tangents that are not for the current session. Reviewed on Flex Days.
 
-- —
+- Data paths: compute from the repo root or an env var in config.py instead of relative paths (W1S2)
+- spark.py hard-codes master("local[*]"); on Databricks the platform provides the session (W5)
+- Verify that the two 476-byte part-00000 files in the smoke table are empty schema-only files (optional)
 
 ## Open questions
 
@@ -66,6 +69,17 @@
 ---
 
 ## Session log
+
+### 2026-11-21 — W1S1 (part 2) — Java, pinned Spark + Delta, SparkSession factory, Delta smoke test
+- **Status:** partially done
+- **Done:** Temurin JDK 17 with `JAVA_HOME`; Python 3.12 pinned; `pyproject.toml` with `pyspark==4.1.1` and `delta-spark==4.3.1`, `uv.lock` committed; `spark.py` (`get_spark()` with Delta extensions and configurable driver memory); `jobs/smoke.py` (overwrite + append, read back, history) and `make smoke` working.
+- **Not done / moved:** Kafka (KRaft) in Docker + topic listing → first ~45 min of the next session.
+- **Learned:** Spark is a JVM engine controlled from Python via Py4J; Delta is a plugin (jar) inside it, so versions must match — the real limit is in the package metadata (`pyspark<=4.1.1`), not only in the compatibility table, and the resolver caught it at install time. The Delta reader trusts the log, not the folder: 7 Parquet files on disk, 5 referenced by `add` actions, `count()` = 5. One non-empty partition = one task = one file. `overwrite` + `append` is idempotent in content but history keeps growing.
+- **Struggled with:** Too many new terms at once (JVM, Catalyst, Scala binary version) — asked to separate "needed now" from "later", which worked. Imported `src.linewerk` instead of `linewerk`, which hid a typo in the wheel package path (`stc/linewerk`); found it once the import was fixed.
+- **Decisions:** DEC-008
+- **Interview Q:** Driver vs executor — what runs where in `local[*]`, and what does it mean for memory? → ok (roles correct; missed that both live in one JVM and run in parallel, and the driver-memory-is-the-whole-budget point)
+- **LinkedIn note:** My first Delta table had 7 Parquet files on disk but only 5 belonged to the table — the transaction log, not the folder, decides what the table is.
+- **Next:** W1S1 (finish: Kafka) → W1S2 — Spark DataFrame fundamentals and lazy evaluation
 
 ### 2026-11-20 — W1S1 (part 1) — Repository skeleton
 - **Status:** partially done

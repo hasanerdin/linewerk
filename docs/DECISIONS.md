@@ -14,6 +14,7 @@
 | DEC-005 | Control limits as an SCD Type 2 dimension | accepted |
 | DEC-006 | Databricks Asset Bundles instead of Terraform | accepted |
 | DEC-007 | PySpark runs natively on macOS, not in Docker | accepted |
+| DEC-008 | Pinned runtime: Spark 4.1.1, Delta 4.3.1, Python 3.12, Java 17 | accepted |
 
 ---
 
@@ -65,3 +66,10 @@
 - **Decision:** Native PySpark with Java 17, managed with `uv`. Only Kafka runs in Docker (~1–2 GB).
 - **Why:** Leaves 8–10 GB for the Spark driver, which the wide-to-long transformation needs.
 - **Consequences:** The local setup is less portable. This is mitigated by pinned versions and clear setup steps in the README; CI runs on Linux with Java installed in the runner.
+
+### DEC-008 — Pinned runtime: Spark 4.1.1, Delta 4.3.1, Python 3.12, Java 17 (2026-11-21, W1S1)
+- **Context:** delta-spark hooks into Spark internals, so Spark and Delta versions must match exactly; the same gold code must later run on Databricks.
+- **Options:** Latest PySpark (4.1.4) / Spark 4.0.x with Delta 4.0 / Spark 4.1.1 with Delta 4.3.1
+- **Decision:** `pyspark==4.1.1`, `delta-spark==4.3.1`, Python 3.12, Temurin JDK 17; exact pins plus a committed `uv.lock`.
+- **Why:** delta-spark 4.3.1 declares `pyspark>=4.0.1,<=4.1.1`, so 4.1.4 was rejected by the resolver. Spark 4.1, Python 3.12 and JDK 17 match Databricks Runtime 18 / serverless environment 5, which keeps local and Databricks behaviour close.
+- **Consequences:** Not on the newest PySpark patch. Revisit when a Delta release supports a newer Spark, or when the Databricks serverless runtime moves on (W5).
