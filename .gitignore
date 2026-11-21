@@ -1,5 +1,5 @@
 # Raw data, Delta lake, streaming checkpoints: never committed (Kaggle rules)
-data/
+/data/
 
 # Python
 .venv/

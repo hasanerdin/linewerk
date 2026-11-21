@@ -5,7 +5,7 @@
 
 ## Current position
 
-- **Next session:** W1S1 — Project skeleton and environment
+- **Next session:** W1S1 (continued) — Java 17, uv project, Spark + Delta smoke test, Kafka
 - **Week:** 1 of 6 — Setup, Spark fundamentals, data profiling
 - **Plan status:** on track
 - **Started:** 2026-11-20 · **Target finish:** ~2026-12-31 (may stretch to 7 weeks over Christmas)
@@ -39,7 +39,8 @@
 
 > Concepts to revisit in recall checks until they are solid.
 
-- —
+- Databricks Free Edition constraints (serverless only, streaming only with AvailableNow, no outbound access to local Kafka) — not to be confused with paid trials
+- Why Spark runs natively on macOS: Docker runs inside a Linux VM that reserves RAM; native leaves 8–10 GB for the driver
 
 ## Parking lot
 
@@ -65,6 +66,17 @@
 ---
 
 ## Session log
+
+### 2026-11-20 — W1S1 (part 1) — Repository skeleton
+- **Status:** partially done
+- **Done:** GitHub repo `linewerk` created; folder layout (`src/linewerk/` with `__init__.py` packages, `tests/`, `databricks/`, `docs/`); `.gitignore`; README stub; ROADMAP / PROGRESS / DECISIONS moved into `docs/`; repo connected to the Claude project and synced.
+- **Not done / moved:** Java 17, `uv` project with pinned pyspark + delta-spark, `spark.py`, Delta smoke test, Kafka in Docker → W1S1 (continued), next session.
+- **Learned:** Git tracks files, not folders, so empty folders need a placeholder; in Python packages that is `__init__.py`. The `src/` layout forces tests to import the installed package. In `.gitignore`, a leading `/` anchors a pattern to the repo root and a trailing `/` matches directories only.
+- **Struggled with:** Mixed up Free Edition limits with paid-trial credit limits (recall check).
+- **Decisions:** —
+- **Interview Q:** How do you make sure raw data never ends up in a public repo, including by accident? → ok (anchoring correct; missing defence in depth: tracked files, history rewrite, pre-commit/CI checks)
+- **LinkedIn note:** Day 1 of Linewerk: the first line of `.gitignore` is a licence decision — the Bosch data must never be redistributed, so the repo ships a download script instead of data.
+- **Next:** W1S1 (continued) — PySpark + Delta smoke test and Kafka (KRaft) running locally
 
 ### 2026-11-19 — W0 — Project planning
 - **Status:** done
