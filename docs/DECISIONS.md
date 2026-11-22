@@ -15,6 +15,8 @@
 | DEC-006 | Databricks Asset Bundles instead of Terraform | accepted |
 | DEC-007 | PySpark runs natively on macOS, not in Docker | accepted |
 | DEC-008 | Pinned runtime: Spark 4.1.1, Delta 4.3.1, Python 3.12, Java 17 | accepted |
+| DEC-009 | Kafka container without a persistent volume | accepted |
+| DEC-010 | Raw files are stored unzipped as plain CSV | accepted |
 
 ---
 
@@ -73,3 +75,17 @@
 - **Decision:** `pyspark==4.1.1`, `delta-spark==4.3.1`, Python 3.12, Temurin JDK 17; exact pins plus a committed `uv.lock`.
 - **Why:** delta-spark 4.3.1 declares `pyspark>=4.0.1,<=4.1.1`, so 4.1.4 was rejected by the resolver. Spark 4.1, Python 3.12 and JDK 17 match Databricks Runtime 18 / serverless environment 5, which keeps local and Databricks behaviour close.
 - **Consequences:** Not on the newest PySpark patch. Revisit when a Delta release supports a newer Spark, or when the Databricks serverless runtime moves on (W5).
+
+### DEC-009 — Kafka container without a persistent volume (2026-11-22, W1S1)
+- **Context:** The local Kafka broker stores topic data inside the container. A volume would keep it across `docker compose down`.
+- **Options:** Named volume for the Kafka log dirs / no volume, data lives in the container
+- **Decision:** No volume. Topics and data survive `stop`/`start` but are lost on `down`.
+- **Why:** The stream is a replay of the test set (DEC-002); topics are recreated by script and the data can always be produced again, so persistence adds nothing. It also avoids volume permission issues with the `apache/kafka` image (non-root user).
+- **Consequences:** `docker compose down` resets Kafka; streaming checkpoints must be reset at the same time or the consumer will point at offsets that no longer exist. Revisit if a long-running demo needs history.
+
+### DEC-010 — Raw files are stored unzipped as plain CSV (2026-11-22, W1S2)
+- **Context:** Kaggle delivers `.csv.zip` files. Spark has no codec for zip archives and would read them as garbage without an error.
+- **Options:** Keep zip and unzip on the fly / re-compress as `.csv.gz` / unzip to plain CSV
+- **Decision:** `ingest/download.py` unzips to plain CSV in `data/raw/` and deletes the zip.
+- **Why:** Plain CSV is splittable, so Spark reads one file with many parallel tasks; gzip is not splittable (one task per file). Disk cost is acceptable: 9.36 GiB unzipped vs 658 MiB zipped, ~80 GB free.
+- **Consequences:** ~8.7 GiB more disk use. Raw CSV is only read once into bronze (Delta/Parquet, compressed), after which the CSVs could be deleted if disk gets tight.

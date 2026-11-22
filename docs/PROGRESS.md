@@ -5,7 +5,7 @@
 
 ## Current position
 
-- **Next session:** W1S1 (finish: Kafka in Docker, ~45 min) → W1S2 — Spark DataFrame fundamentals and lazy evaluation
+- **Next session:** W1S2 (continued) — schema strategy (inferSchema vs explicit), explain(), Spark UI
 - **Week:** 1 of 6 — Setup, Spark fundamentals, data profiling
 - **Plan status:** on track
 - **Started:** 2026-11-20 · **Target finish:** ~2026-12-31 (may stretch to 7 weeks over Christmas)
@@ -25,7 +25,7 @@
 
 | Metric | Value | Measured in |
 |---|---|---|
-| Raw data size on disk (in-scope files) | — | — |
+| Raw data size on disk (in-scope files) | 9.36 GiB unzipped (658 MiB zipped): numeric 1.99 GiB ×2, date 2.69 GiB ×2 | W1S2 |
 | Parts (train / test) | — | — |
 | Columns (numeric / date) | — | — |
 | Non-null measurements (= silver rows) | — | — |
@@ -42,14 +42,17 @@
 - Why Spark runs natively on macOS: Docker runs inside a Linux VM that reserves RAM; native leaves 8–10 GB for the driver
 - Spark memory in local mode: spark.driver.memory is the whole budget; ~300 MB reserved, ~60% of the rest is the unified execution/storage pool; must be set before the JVM starts
 - Driver and executor share one JVM in local[*]; tasks run in parallel as threads (one per core), not one after another
+- Kafka bootstrap vs advertised.listeners: first connection works, then the client uses the advertised address from the metadata (Docker hostname trap)
+- In local mode spark.executor.memory has no effect (no separate executor JVM); the 4.6 GiB in the UI is the unified pool, not an executor share
 
 ## Parking lot
 
 > Good ideas and tangents that are not for the current session. Reviewed on Flex Days.
 
-- Data paths: compute from the repo root or an env var in config.py instead of relative paths (W1S2)
-- spark.py hard-codes master("local[*]"); on Databricks the platform provides the session (W5)
+- W5: spark.py master and config.py root detection both assume a local repo; add an env var override (e.g. LINEWERK_DATA_DIR) for Databricks
 - Verify that the two 476-byte part-00000 files in the smoke table are empty schema-only files (optional)
+- Why do date files compress 47× vs 7.5× for numeric? → check in W1S4 (timestamps constant per station?)
+- Convention: Kafka topic names use dots only, never underscores (metric name collision warning)
 
 ## Open questions
 
@@ -69,6 +72,17 @@
 ---
 
 ## Session log
+
+### 2026-11-22 — W1S1 (finish) + W1S2 (part 1) — Kafka up, data downloaded
+- **Status:** partially done (W1S1 done; W1S2 partially done)
+- **Done:** Single-node Kafka 4.3.2 (KRaft, combined broker+controller) in Docker; topic `linewerk.smoke` (3 partitions) created, listed and described → W1S1 closed. Kaggle API token set up in `~/.kaggle` (outside the repo, `chmod 600`); `kaggle` + `six` added as dev dependencies (kaggle imports six without declaring it). `config.py` with repo-root-based `RAW_DIR`. `ingest/download.py`: idempotent download + unzip of the 4 in-scope files via the Kaggle Python API, temp dir + atomic rename, `.done` markers, failures propagate. Tested from a clean state and re-run (all skipped).
+- **Not done / moved:** inferSchema vs explicit schema timing, select/filter/groupBy/join practice, `explain()` and Spark UI shuffle → W1S2 (continued).
+- **Learned:** Kafka keeps messages after they are read (retention); consumers track their own offsets, which is what makes replay possible. Bootstrap is only the entry point: the broker returns metadata with `advertised.listeners`, and the client then connects to those addresses directly. Spark reads `.gz` (a codec) but not `.zip` (an archive), and gzip is not splittable, so raw files are stored as plain CSV. A rename on the same filesystem is atomic, so temp dir + move never leaves a half-written file.
+- **Struggled with:** Many new Kafka terms at once (broker, controller, ISR, bootstrap) — a "now vs W4" split helped. Mixed up the Databricks outbound restriction with the `advertised.listeners` problem.
+- **Decisions:** DEC-009, DEC-010
+- **Interview Q:** How do you make a batch ingestion job idempotent? → good (clear step-by-step; add the one-line definition, "atomic rename", failure propagation, and the table-level answer)
+- **LinkedIn note:** The date files are 59 MiB zipped but 2.69 GiB unzipped (47×), while the numeric files only grow 7.5× — the timestamps are so repetitive that the compression ratio already hints at how the line records time.
+- **Next:** W1S2 (continued) — schema strategy, `explain()` and the Spark UI
 
 ### 2026-11-21 — W1S1 (part 2) — Java, pinned Spark + Delta, SparkSession factory, Delta smoke test
 - **Status:** partially done
