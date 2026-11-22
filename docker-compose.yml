@@ -1,0 +1,25 @@
+services:
+  kafka:
+    image: apache/kafka:4.3.2          # pinned: latest patch of the 4.3 line, no "latest"
+    container_name: linewerk-kafka
+    ports:
+      - "9092:9092"                    # host:container, Spark on the Mac connects here
+    environment:
+      # KRaft single node: this process is both broker and controller
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      # Listeners: 9092 for clients, 9093 for the controller (internal)
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      # One broker -> internal topics cannot be replicated 3x
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Topics are created explicitly, a typo must not silently create a new topic
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Keep the JVM small: Spark needs the RAM (16 GB Mac)
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx1g"

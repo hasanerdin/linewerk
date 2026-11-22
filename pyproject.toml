@@ -10,7 +10,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "ruff"]
+dev = [
+    "kaggle>=2.2.5",
+    "pytest",
+    "ruff",
+    "six>=1.17.0", # kaggle CLI imports six without declaring it
+]
 
 [build-system]
 requires = ["hatchling"]
