@@ -1,4 +1,3 @@
-import os
 import zipfile
 import tempfile
 import shutil
@@ -16,7 +15,7 @@ TARGET_SCOPE = [
 
 COMPETITION_SLUG = "bosch-production-line-performance"
 
-def format_size(bytes_size):
+def format_size(bytes_size: float) -> str:
     for unit in ["B", "KB", "MB", "GB", "TB"]:
         if bytes_size < 1024:
             return f"{bytes_size:.2f} {unit}"

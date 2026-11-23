@@ -17,6 +17,8 @@
 | DEC-008 | Pinned runtime: Spark 4.1.1, Delta 4.3.1, Python 3.12, Java 17 | accepted |
 | DEC-009 | Kafka container without a persistent volume | accepted |
 | DEC-010 | Raw files are stored unzipped as plain CSV | accepted |
+| DEC-011 | Explicit schema generated from the CSV header | accepted |
+| DEC-012 | Feature branches with squash-merged PRs | accepted |
 
 ---
 
@@ -89,3 +91,17 @@
 - **Decision:** `ingest/download.py` unzips to plain CSV in `data/raw/` and deletes the zip.
 - **Why:** Plain CSV is splittable, so Spark reads one file with many parallel tasks; gzip is not splittable (one task per file). Disk cost is acceptable: 9.36 GiB unzipped vs 658 MiB zipped, ~80 GB free.
 - **Consequences:** ~8.7 GiB more disk use. Raw CSV is only read once into bronze (Delta/Parquet, compressed), after which the CSVs could be deleted if disk gets tight.
+
+### DEC-011 — Explicit schema generated from the CSV header (2026-11-23, W1S2)
+- **Context:** The raw files have 970 (numeric) and 1,157 (date) columns. Spark can infer types or receive an explicit schema.
+- **Options:** `inferSchema=True` / `inferSchema` with `samplingRatio` / explicit `StructType` written by hand / explicit `StructType` generated from the header
+- **Decision:** `ingest/schema.py` reads only the header line in plain Python and builds the schema: `Id` int (non-nullable), `Response` int, every `L<n>_S<n>_F<n>` / `L<n>_S<n>_D<n>` column double. Any other column name raises a `ValueError`.
+- **Why:** inferSchema costs a full extra pass (train_numeric read + count: 5.64 s vs 1.77 s explicit) and its types are unstable: 19 columns came out as int on a 100k-row sample, 16 on the full file. Generating from the header keeps the schema in sync with column order without writing 2,000+ fields by hand.
+- **Consequences:** All features are double even when values look like integers. A renamed or new column stops the pipeline until a human decides (fail-fast on schema drift). For streaming (W4) the schema is fixed, so header-vs-schema order must be checked (`enforceSchema=False`).
+
+### DEC-012 — Feature branches with squash-merged PRs (2026-11-23, W1S2)
+- **Context:** Until W1S1 all commits went straight to `main`. The repo is also a portfolio, and CI arrives in W5.
+- **Options:** Commit to `main` / Gitflow with `develop` / one feature branch per session or feature, squash-merged via PR
+- **Decision:** One branch per session or feature, a PR with a short summary and the measured numbers, squash merge, delete the branch. Then press *Sync now* (the Claude project syncs `main` only).
+- **Why:** Small, reviewable units and a readable history that shows how I work. Gitflow is overhead for a single developer.
+- **Consequences:** Code on a branch is not visible to the mentor via sync until merged — paste it for review. Branch protection with required CI checks follows in W5.
