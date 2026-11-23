@@ -9,5 +9,5 @@ def get_project_root() -> Path:
     raise FileNotFoundError("Project root has not been found!")
 
 ROOT_DIR = get_project_root()
-
-RAW_DIR = ROOT_DIR / "data" / "raw"
+DATA_DIR = ROOT_DIR / "data"
+RAW_DIR = DATA_DIR / "raw"
