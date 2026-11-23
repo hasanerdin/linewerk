@@ -5,7 +5,7 @@
 
 ## Current position
 
-- **Next session:** W1S2 (continued) — schema strategy (inferSchema vs explicit), explain(), Spark UI
+- **Next session:** W1S3 — Data profiling (part 1): shape and sparsity. Plan status: on track (tight: W1S3, W1S4 and W1F left this week)
 - **Week:** 1 of 6 — Setup, Spark fundamentals, data profiling
 - **Plan status:** on track
 - **Started:** 2026-11-20 · **Target finish:** ~2026-12-31 (may stretch to 7 weeks over Christmas)
@@ -26,8 +26,9 @@
 | Metric | Value | Measured in |
 |---|---|---|
 | Raw data size on disk (in-scope files) | 9.36 GiB unzipped (658 MiB zipped): numeric 1.99 GiB ×2, date 2.69 GiB ×2 | W1S2 |
-| Parts (train / test) | — | — |
-| Columns (numeric / date) | — | — |
+| Parts (train / test) | train 1,183,747 / test — | W1S2 |
+| Columns (numeric / date) | train_numeric 970 (Id + 968 features + Response) / train_date 1,157 (Id + 1,156) | W1S2 |
+| Explicit schema vs inferSchema (train_numeric, read + count) | 1.77 s vs 5.64 s (~3.2×) | W1S2 |
 | Non-null measurements (= silver rows) | — | — |
 | Overall failure rate | — | — |
 | Silver build time | — | — |
@@ -43,7 +44,8 @@
 - Spark memory in local mode: spark.driver.memory is the whole budget; ~300 MB reserved, ~60% of the rest is the unified execution/storage pool; must be set before the JVM starts
 - Driver and executor share one JVM in local[*]; tasks run in parallel as threads (one per core), not one after another
 - Kafka bootstrap vs advertised.listeners: first connection works, then the client uses the advertised address from the metadata (Docker hostname trap)
-- In local mode spark.executor.memory has no effect (no separate executor JVM); the 4.6 GiB in the UI is the unified pool, not an executor share
+- Job vs stage vs task: job = one action, stage = split at each shuffle, task = one per partition
+- Reading physical plans in plain words: partial/final aggregate around one Exchange; broadcast join vs sort-merge join; hash partitioning (same key → same partition)
 
 ## Parking lot
 
@@ -54,6 +56,9 @@
 - Why do date files compress 47× vs 7.5× for numeric? → check in W1S4 (timestamps constant per station?)
 - Convention: Kafka topic names use dots only, never underscores (metric name collision warning)
 - W5: branch protection on main — CI must pass before merge
+- W5: branch protection on main — CI must pass before merge (sabah eklemediysen)
+- W2S3: try spark.sql.shuffle.partitions lower than 200 for a 8-core laptop and measure
+- W1S4: check join completeness — does every numeric Id have a date row (and vice versa)?
 
 ## Open questions
 
@@ -62,6 +67,17 @@
 ---
 
 ## Session log
+
+### 2026-11-23 — W1S2 (finish) — Schema strategy and reading Spark plans
+- **Status:** done
+- **Done:** Feature-branch workflow started (`w1s2-schema-explain`, PR). `ingest/schema.py`: explicit schema generated from the CSV header (Id/Response int, all features double, fail-fast on unknown columns). `jobs/schema_benchmark.py`: explicit vs inferSchema with warm-up. Read physical plans for filter, groupBy-count and a join (broadcast vs sort-merge) and matched them to jobs/stages/tasks in the Spark UI.
+- **Not done / moved:** — (join on the full tables comes in W2S2 as planned)
+- **Learned:** Explicit schema needs no extra pass; inferSchema reads the whole file once more and its types depend on the rows it sees (19 int columns on a sample, 16 on the full file). A job is one action, stages are split at shuffles, tasks are one per partition; the number of read partitions is min(128 MB, file size / cores). `groupBy().count()` counts inside each partition first, then shuffles only the small partial results. A join either copies the small side to every task (broadcast) or shuffles and sorts both sides by the key (sort-merge join).
+- **Struggled with:** Too many new terms at once in the explain block (HashAggregate, Exchange, AQE, codegen) — asked to slow down; plain-language explanations with the "8 shift supervisors" analogy worked. Mentor rule from now on: max 1–2 new terms per step, plain words first. Mixed up jobs and tasks in the first prediction.
+- **Decisions:** DEC-011, DEC-012
+- **Interview Q:** What causes a shuffle in Spark, and why is it expensive? → ok (wide ops and cost items right; state "same key must meet in one partition", disk not memory, stage boundary)
+- **LinkedIn note:** inferSchema typed 19 columns as int on a 100k sample but only 16 on the full file — the same column changes type depending on the rows Spark sees.
+- **Next:** W1S3 — Data profiling (part 1): shape and sparsity
 
 ### 2026-11-22 — W1S1 (finish) + W1S2 (part 1) — Kafka up, data downloaded
 - **Status:** partially done (W1S1 done; W1S2 partially done)
