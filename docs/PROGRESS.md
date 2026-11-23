@@ -53,21 +53,11 @@
 - Verify that the two 476-byte part-00000 files in the smoke table are empty schema-only files (optional)
 - Why do date files compress 47× vs 7.5× for numeric? → check in W1S4 (timestamps constant per station?)
 - Convention: Kafka topic names use dots only, never underscores (metric name collision warning)
+- W5: branch protection on main — CI must pass before merge
 
 ## Open questions
 
 - —
-
-## LinkedIn posts
-
-| # | Week | Topic | Status | Link |
-|---|---|---|---|---|
-| 1 | W1 | Why I'm building Linewerk | planned | — |
-| 2 | W2 | 1,000-column sparse table → long-format lakehouse | planned | — |
-| 3 | W3 | Why my control limits needed SCD Type 2 | planned | — |
-| 4 | W4 | Replaying a real factory line through Kafka | planned | — |
-| 5 | W5 | Same code, two runtimes: local Spark and Databricks | planned | — |
-| 6 | W6 | Final post: findings + dashboard | planned | — |
 
 ---
 
