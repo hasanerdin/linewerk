@@ -1,9 +1,8 @@
-import re
 from pathlib import Path
-
 from pyspark.sql.types import StructType, StructField, IntegerType, DoubleType, DataType
 
 from linewerk.config import RAW_DIR
+from linewerk.naming import check_column_pattern
 
 def read_header(path: Path) -> list[str]:
     with open(path, mode="r") as file:
@@ -15,7 +14,7 @@ def find_the_column_type(column_name: str) -> DataType:
     if column_name in ["Id", "Response"]:
         return IntegerType()
     
-    if bool(re.fullmatch(r"L\d+_S\d+_[FD]\d+", column_name)):
+    if check_column_pattern(column_name):
         return DoubleType()
     else:
         raise ValueError(f"Unknown column name: {column_name}")
