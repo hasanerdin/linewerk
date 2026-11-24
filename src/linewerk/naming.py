@@ -1,5 +1,7 @@
 import re
 
+NON_FEATURE_COLUMNS = {"Id", "Response"}
+
 def check_column_pattern(column_name: str) -> bool:
     return bool(parse_column_by_pattern(column_name))
 

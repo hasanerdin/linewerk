@@ -1,4 +1,3 @@
-from pathlib import Path
 from linewerk.spark import get_spark
 from delta.tables import DeltaTable
 

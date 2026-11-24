@@ -5,7 +5,7 @@
 
 ## Current position
 
-- **Next session:** W1S3 — Data profiling (part 1): shape and sparsity. Plan status: on track (tight: W1S3, W1S4 and W1F left this week)
+- **Next session:** W1S4 — Data profiling (part 2): time and labels. Plan status: on track (W1S4 and W1F left this week)
 - **Week:** 1 of 6 — Setup, Spark fundamentals, data profiling
 - **Plan status:** on track
 - **Started:** 2026-11-20 · **Target finish:** ~2026-12-31 (may stretch to 7 weeks over Christmas)
@@ -26,10 +26,12 @@
 | Metric | Value | Measured in |
 |---|---|---|
 | Raw data size on disk (in-scope files) | 9.36 GiB unzipped (658 MiB zipped): numeric 1.99 GiB ×2, date 2.69 GiB ×2 | W1S2 |
-| Parts (train / test) | train 1,183,747 / test — | W1S2 |
-| Columns (numeric / date) | train_numeric 970 (Id + 968 features + Response) / train_date 1,157 (Id + 1,156) | W1S2 |
+| Parts (train / test) | train 1,183,747 / test 1,183,748 | W1S2 / W1S3 |
+| Columns (numeric / date) | train_numeric 970 (Id + 968 features + Response), test_numeric 969 / date 1,157 (Id + 1,156) | W1S2 / W1S3 |
+| Lines / station IDs | 4 lines, 52 station IDs (S0–S51), 50 with numeric features | W1S3 |
 | Explicit schema vs inferSchema (train_numeric, read + count) | 1.77 s vs 5.64 s (~3.2×) | W1S2 |
-| Non-null measurements (= silver rows) | — | — |
+| Non-null measurements (= silver rows) | train 216,741,930 / test 216,694,404 / total 433,436,334 (18.9% of wide cells) | W1S3 |
+| Null count, 968 columns: single pass vs per-column loop | 15.0 s / 2 jobs vs ~24 min / ~1,936 jobs (loop measured on 20 columns, extrapolated) | W1S3 |
 | Overall failure rate | — | — |
 | Silver build time | — | — |
 | Query speed-up after layout optimisation | — | — |
@@ -46,6 +48,8 @@
 - Kafka bootstrap vs advertised.listeners: first connection works, then the client uses the advertised address from the metadata (Docker hostname trap)
 - Job vs stage vs task: job = one action, stage = split at each shuffle, task = one per partition
 - Reading physical plans in plain words: partial/final aggregate around one Exchange; broadcast join vs sort-merge join; hash partitioning (same key → same partition)
+- `df.count()` (action, returns a number) vs `df.groupBy().count()` (transformation, returns a DataFrame)
+- CSV column pruning: `count()` can skip parsing values; an aggregation over all columns cannot
 
 ## Parking lot
 
@@ -56,9 +60,11 @@
 - Why do date files compress 47× vs 7.5× for numeric? → check in W1S4 (timestamps constant per station?)
 - Convention: Kafka topic names use dots only, never underscores (metric name collision warning)
 - W5: branch protection on main — CI must pass before merge
-- W5: branch protection on main — CI must pass before merge (sabah eklemediysen)
 - W2S3: try spark.sql.shuffle.partitions lower than 200 for a 8-core laptop and measure
 - W1S4: check join completeness — does every numeric Id have a date row (and vice versa)?
+- W2S1: CSV read mode for bronze — PERMISSIVE silently nulls malformed rows; consider FAILFAST or a corrupt-record column
+- W1F: roadmap and project description say "51 stations" — data has 52 station IDs (S0–S51); fix in the changelog
+- W2 (layout): L3 holds ~73% of filled cells — partitioning by line would be skewed; include this in the W2S3 benchmark
 
 ## Open questions
 
@@ -67,6 +73,17 @@
 ---
 
 ## Session log
+
+### 2026-11-24 — W1S3 — Shape and sparsity
+- **Status:** done
+- **Done:** `naming.py` (single regex with capture groups, shared by schema and parsing); `transforms/parsing.py` (`ColumnInfo` frozen dataclass, fail-fast `parse_column`) + `build_column_lookup` with tests. `jobs/profile_shape.py`: size / rows / columns for all 4 files; test headers = train headers minus `Response`. `quality/profiling.py`: `non_null_counts` — all 968 features in one aggregation; `tests/conftest.py` with a session-scoped SparkSession. `jobs/null_count_benchmark.py`: loop vs single pass with job groups. `quality/fill_ratio.py` + `jobs/non_null_profile.py`: fill ratio per station and line in plain Python from a JSON cache (invalidated by size + mtime). `docs/profiling.md` with files, column structure, sparsity, expected silver size, hypotheses H1–H4.
+- **Not done / moved:** —
+- **Learned:** `df.count()` is an action, `df.groupBy().count()` is a transformation that returns a DataFrame. `F.count(col)` counts only non-null values. One aggregation over 968 columns reads the file once (15 s), a loop of counts reads it once per column (~24 min); `count()` alone is faster still because CSV column pruning lets Spark skip parsing the values. Nulls here are structural ("part did not visit this station"), and column count is a poor proxy for volume (L1: 53% of features, ~6% of filled cells). `spark.ui.retainedJobs` (default 1000) caps what the status tracker remembers.
+- **Struggled with:** The `groupBy().count()` vs `df.count()` trap in the recall check; forgot what CSV column pruning means; misread one toy `count(col)` result. First `parse_column` had an inverted condition and string-typed fields (type hints are not enforced at runtime); pydantic was used without being declared in `pyproject.toml`.
+- **Decisions:** DEC-013, DEC-014
+- **Interview Q:** What does 81% sparsity in a ~1,000-column table tell you about storage and modelling? → ok (long format and "null = not measured" right; add the measured numbers, schema-change / per-feature-logic argument, and a concrete layout example)
+- **LinkedIn note:** Counting nulls in 968 columns: a per-column loop would need ~1,936 Spark jobs and ~24 min; one aggregation took 15 s and 2 jobs. And column count lied about volume: L1 has 53% of the features but ~6% of the filled cells.
+- **Next:** W1S4 — Data profiling (part 2): time and labels
 
 ### 2026-11-23 — W1S2 (finish) — Schema strategy and reading Spark plans
 - **Status:** done

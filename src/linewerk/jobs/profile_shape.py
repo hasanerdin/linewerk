@@ -6,9 +6,8 @@ from pyspark.sql import SparkSession
 
 from linewerk.config import RAW_DIR
 from linewerk.ingest.schema import read_header, schema_for_file
-from linewerk.transforms.parsing import ColumnInfo, parse_column
+from linewerk.transforms.parsing import ColumnInfo, build_column_lookup
 
-NON_FEATURE_COLUMNS = {"Id", "Response"}
 SHAPE_FILES = ["train_numeric.csv", "train_date.csv", "test_numeric.csv", "test_date.csv"]
 BYTES_PER_GIB = 1024**3
 
@@ -53,15 +52,6 @@ def format_shape_table(shapes: list[FileShape]) -> str:
     for s in shapes:
         lines.append(f"| {s.file} | {s.size_gib:.2f} | {s.rows:,} | {s.columns:,} |")
     return "\n".join(lines)
-
-
-def build_column_lookup(column_names: list[str]) -> list[tuple[str, ColumnInfo]]:
-    """Map each feature column name to its parsed (line, station, kind, number).
-
-    Fails fast: an unknown column name raises ValueError from parse_column.
-    """
-    feature_columns = [c for c in column_names if c not in NON_FEATURE_COLUMNS]
-    return [(name, parse_column(name)) for name in feature_columns]
 
 
 def print_shape(lookup: list[tuple[str, ColumnInfo]]) -> None:
