@@ -19,7 +19,8 @@
 | DEC-010 | Raw files are stored unzipped as plain CSV | accepted |
 | DEC-011 | Explicit schema generated from the CSV header | accepted |
 | DEC-012 | Feature branches with squash-merged PRs | accepted |
-
+| DEC-013| Parse feature names once from the header into a lookup table | accepted |
+| DEC-014 | `station` is the natural key of `dim_station`; `line` is an attribute | accepted |
 ---
 
 ### DEC-001 — Dataset: Bosch Production Line Performance (2026-11-19, W0)
@@ -105,3 +106,17 @@
 - **Decision:** One branch per session or feature, a PR with a short summary and the measured numbers, squash merge, delete the branch. Then press *Sync now* (the Claude project syncs `main` only).
 - **Why:** Small, reviewable units and a readable history that shows how I work. Gitflow is overhead for a single developer.
 - **Consequences:** Code on a branch is not visible to the mentor via sync until merged — paste it for review. Branch protection with required CI checks follows in W5.
+
+### DEC-013 — Parse feature names once from the header into a lookup table (2026-11-24, W1S3)
+- **Context:** Line, station and feature are encoded in the column names (`L3_S50_F4243`). They are needed for every silver row and for the station/line dimensions.
+- **Options:** A: parse the name per row in Spark after the unpivot / B: parse the ~2,100 header names once in plain Python and join the small lookup table.
+- **Decision:** B. One regex with capture groups in `naming.py` is the single source of the naming rule; `parse_column` fails fast on unknown names.
+- **Why:** ~2,100 names vs ~433M silver rows; string parsing per row would repeat the same work millions of times. One regex keeps schema validation and parsing consistent.
+- **Consequences:** The lookup must be built from the same header as the data; a new column naming scheme fails loudly at parse time instead of producing null line/station values.
+
+### DEC-014 — `station` is the natural key of `dim_station`; `line` is an attribute (2026-11-24, W1S3)
+- **Context:** Station numbers could have been local to each line (S0 on every line) or global.
+- **Options:** A: composite key (line, station) / B: station alone, with line as an attribute.
+- **Decision:** B.
+- **Why:** Profiling of all four headers shows station numbers S0–S51 are unique across lines (L0 = S0–S23, L1 = S24–S25, L2 = S26–S28, L3 = S29–S51); no number appears on two lines.
+- **Consequences:** Simpler joins and keys. If a future data source reuses station numbers across lines, the key must become composite. Add a uniqueness check (station → exactly one line) in W2S4.
