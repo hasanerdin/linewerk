@@ -8,7 +8,12 @@ from linewerk.config import RAW_DIR
 from linewerk.ingest.schema import read_header, schema_for_file
 from linewerk.transforms.parsing import ColumnInfo, build_column_lookup
 
-SHAPE_FILES = ["train_numeric.csv", "train_date.csv", "test_numeric.csv", "test_date.csv"]
+SHAPE_FILES = [
+    "train_numeric.csv",
+    "train_date.csv",
+    "test_numeric.csv",
+    "test_date.csv",
+]
 BYTES_PER_GIB = 1024**3
 
 
@@ -66,7 +71,9 @@ def print_shape(lookup: list[tuple[str, ColumnInfo]]) -> None:
         for station, kinds in sorted(stations.items()):
             f_count = len(kinds["F"])
             d_count = len(kinds["D"])
-            print(f"  └── Station {station}: {f_count} F column(s), {d_count} D column(s)")
+            print(
+                f"  └── Station {station}: {f_count} F column(s), {d_count} D column(s)"
+            )
 
 
 def profile_shape(file_path: Path) -> list[tuple[str, ColumnInfo]]:

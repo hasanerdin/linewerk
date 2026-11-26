@@ -60,7 +60,12 @@ def compute_non_null(csv_path: Path) -> dict:
     features = [c for c in df.columns if c not in NON_FEATURE_COLUMNS]
     row = non_null_counts(df, features).collect()[0].asDict()
     total_rows = row.pop(TOTAL_ROWS_COLUMN)
-    return {"file": csv_path.name, "source": source, "total_rows": total_rows, "non_null": row}
+    return {
+        "file": csv_path.name,
+        "source": source,
+        "total_rows": total_rows,
+        "non_null": row,
+    }
 
 
 def load_or_compute(csv_name: str, refresh: bool) -> dict:
@@ -109,11 +114,16 @@ def report(profile: dict) -> None:
     print(f"\n## {profile['file']} ({total_rows:,} rows, {len(non_null)} features)\n")
     print(format_station_table(stations))
     print(f"\nmin == max: {len(matching)} / {len(stations)} stations")
-    print("not matching: " + (", ".join(f"L{s.line}_S{s.station}" for s in breaking) or "-"))
+    print(
+        "not matching: "
+        + (", ".join(f"L{s.line}_S{s.station}" for s in breaking) or "-")
+    )
     print()
     print(format_line_table(line_fill(non_null, total_rows)))
-    print(f"\nTotal filled cells (expected silver_measurements rows): "
-          f"{total_filled_cells(non_null):,}")
+    print(
+        f"\nTotal filled cells (expected silver_measurements rows): "
+        f"{total_filled_cells(non_null):,}"
+    )
 
 
 def main(refresh: bool) -> None:

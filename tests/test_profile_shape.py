@@ -1,4 +1,3 @@
-
 from linewerk.jobs.profile_shape import (
     FileShape,
     column_count,

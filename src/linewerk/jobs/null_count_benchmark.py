@@ -77,13 +77,21 @@ def main(wait_for_ui: bool) -> None:
     print()
     print("| approach | features | time (s) | Spark jobs |")
     print("|---|---:|---:|---:|")
-    print(f"| loop: filter(isNull).count() | {LOOP_FEATURES} | {loop_s:.1f} | {loop_jobs} |")
-    print(f"| single pass: one agg | {len(features)} | {single_s:.1f} | {single_jobs} |")
+    print(
+        f"| loop: filter(isNull).count() | {LOOP_FEATURES} | {loop_s:.1f} | {loop_jobs} |"
+    )
+    print(
+        f"| single pass: one agg | {len(features)} | {single_s:.1f} | {single_jobs} |"
+    )
     print()
-    print(f"Loop: {per_col:.2f} s/feature -> ~{per_col * len(features) / 60:.0f} min "
-          f"and ~{loop_jobs / LOOP_FEATURES * len(features):.0f} jobs for all {len(features)}")
-    print(f"Null counts of the first 3 features: "
-          f"{ {c: single_nulls[c] for c in loop_features[:3]} }")
+    print(
+        f"Loop: {per_col:.2f} s/feature -> ~{per_col * len(features) / 60:.0f} min "
+        f"and ~{loop_jobs / LOOP_FEATURES * len(features):.0f} jobs for all {len(features)}"
+    )
+    print(
+        f"Null counts of the first 3 features: "
+        f"{ {c: single_nulls[c] for c in loop_features[:3]} }"
+    )
 
     if wait_for_ui:
         input("Spark UI: http://localhost:4040 - Enter to exit")
@@ -91,5 +99,7 @@ def main(wait_for_ui: bool) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--no-wait", action="store_true", help="exit without waiting for the UI")
+    parser.add_argument(
+        "--no-wait", action="store_true", help="exit without waiting for the UI"
+    )
     main(wait_for_ui=not parser.parse_args().no_wait)

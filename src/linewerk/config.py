@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 def get_project_root() -> Path:
     current_path = Path(__file__).resolve()
     for parent in current_path.parents:
@@ -7,6 +8,7 @@ def get_project_root() -> Path:
             return parent
 
     raise FileNotFoundError("Project root has not been found!")
+
 
 ROOT_DIR = get_project_root()
 DATA_DIR = ROOT_DIR / "data"
