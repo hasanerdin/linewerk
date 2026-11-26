@@ -1,10 +1,11 @@
 """Date columns per station: header-level D <-> F mapping and in-row time spread.
 
 numbers_by_station is pure Python (input: column names, output: plain data), so
-it is cheap to test with hand-made headers. station_time_spread works on a Spark
-DataFrame of the date file.
+it is cheap to test with hand-made headers. station_time_spread and
+spread_quantiles work on a Spark DataFrame of the date file.
 """
 
+import itertools
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
@@ -118,10 +119,89 @@ def station_time_spread(df: DataFrame) -> DataFrame:
             )
         )
 
-    # One agg = one pass over the data; the result is a single row holding an
-    # array of per-station structs, exploded into one row per station.
+    return _one_row_per_station(df, per_station)
+
+
+def spread_quantiles(
+    df: DataFrame,
+    stations: list[tuple[int, int]],
+    probs: list[float],
+) -> DataFrame:
+    """Per requested station, quantiles of (hi - lo) over the rows where hi != lo.
+
+    Complements station_time_spread: rows_hi_ne_lo says how OFTEN a station's
+    D columns disagree, this says how MUCH when they do. Rows where they agree
+    are left out on purpose; at a station that rarely disagrees they would pull
+    every quantile to 0.
+
+    Output columns, one row per station, sorted by line and station:
+      n_disagree  rows where hi != lo (the sample the quantiles are taken over)
+      quantiles   array in the order of probs; null if n_disagree is 0
+    Raises ValueError, before any Spark work, if a requested station has no D
+    columns in df.
+    """
+    d_columns = _d_columns_by_station(df.columns)
+    missing = [
+        f"L{line}_S{station}"
+        for line, station in stations
+        if (line, station) not in d_columns
+    ]
+    if missing:
+        raise ValueError(f"No D columns in the DataFrame for: {', '.join(missing)}")
+
+    per_station = []
+    for line, station in sorted(stations):
+        lo, hi = _row_min_max(d_columns[(line, station)])
+        # null where the columns agree (or the part never visits the station);
+        # count and percentile_approx both skip nulls, so this one expression
+        # defines the sample for n_disagree and quantiles alike.
+        spread = F.when(hi != lo, hi - lo)
+        per_station.append(
+            F.struct(
+                F.lit(line).alias("line"),
+                F.lit(station).alias("station"),
+                F.count(spread).alias("n_disagree"),
+                # A list of probs gives one array in a single pass. Default
+                # accuracy (10000): rank error at most n / 10000, exact on small data.
+                F.percentile_approx(spread, probs).alias("quantiles"),
+            )
+        )
+
+    return _one_row_per_station(df, per_station)
+
+
+def _one_row_per_station(df: DataFrame, per_station: list[Column]) -> DataFrame:
+    """Evaluate per-station aggregate structs in one pass, one output row each.
+
+    One agg = one pass over the data; the result is a single row holding an
+    array of per-station structs, exploded into one row per station.
+    """
     return (
         df.agg(F.array(*per_station).alias("stations"))
         .select(F.explode("stations").alias("s"))
         .select("s.*")
     )
+
+
+def global_time_range(df: DataFrame) -> tuple[float, float]:
+    """Smallest and largest value over every D column of df. Runs one Spark job.
+
+    Raises ValueError if df has no D columns or every D value is null.
+    """
+    # Flatten {(line, station): [names]} to one list. Going through
+    # _d_columns_by_station (not df.columns) keeps Id / Response / F columns out.
+    d_columns = list(
+        itertools.chain.from_iterable(_d_columns_by_station(df.columns).values())
+    )
+
+    # Reduce each row to its own min / max first (least / greatest, one
+    # expression each), then aggregate those two columns: 2 aggregates instead
+    # of one F.min and one F.max per D column. Both skip nulls, so an all-null
+    # row drops out and an all-null DataFrame gives (None, None).
+    row_lo, row_hi = _row_min_max(d_columns)
+    lo, hi = df.agg(F.min(row_lo), F.max(row_hi)).first()
+
+    # lo and hi are None together: both are None exactly when no D value exists.
+    if lo is None:
+        raise ValueError("Every D value is null")
+    return lo, hi

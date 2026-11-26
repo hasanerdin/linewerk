@@ -120,3 +120,10 @@
 - **Decision:** B.
 - **Why:** Profiling of all four headers shows station numbers S0–S51 are unique across lines (L0 = S0–S23, L1 = S24–S25, L2 = S26–S28, L3 = S29–S51); no number appears on two lines.
 - **Consequences:** Simpler joins and keys. If a future data source reuses station numbers across lines, the key must become composite. Add a uniqueness check (station → exactly one line) in W2S4.
+
+### DEC-015 — One timestamp per part × station, not per feature (2026-11-26, W1S4)
+- **Context:** Silver needs a timestamp for every measurement (replay order, SPC time buckets, flow path). The header rule `D = F + 1` does not hold: 790 of 1,156 D columns have no F at D-1, and many stations have more D than F columns.
+- **Options:** A: map each F to its D column per feature (null-pattern check, per-station offsets) / B: one timestamp per part × station = min of the station's D columns / C: B for most stations, A only for Line 1 (S24, S25).
+- **Decision:** B — `ts = least(D columns of the station)` per part × station, for all stations.
+- **Why:** In 50 of 52 stations all D values of a part are identical (train and test). In L1 S24 the spread is negligible (p99 0.14 units ≈ 0.01% of the 1718-unit span); S25 has a tail (p95 13.4, p99 19.1 ≈ 1.1% of span). For limit-version lookup and ordering, station entry time is precise enough, and B keeps one source of truth for time (`silver_station_visits`).
+- **Consequences:** Per-feature timing inside L1 S25 is lost (documented as a caveat). Revisit if an L1 S25 finding depends on order within the station. Add a quality check that D values stay equal within a station.

@@ -2,9 +2,13 @@
 
 Block 1 (headers only, no Spark): per station, the F / D counts and how many
 D columns have an F column at D - OFFSET.
-Block 2 (Spark, one pass per date file, train and test): per station, how many
-parts visit it, in how many rows its D timestamps disagree, and the largest
-in-row spread.
+Block 2 (Spark, train and test date files, three passes each):
+  1. global min / max over every D column (the time span of the file)
+  2. per station: how many parts visit it, in how many rows its D timestamps
+     disagree, and the largest in-row spread
+  3. for QUANTILE_STATIONS: quantiles of the in-row spread over the rows where
+     it is non-zero, also as a share of the time span
+Block 2 ends with the span of train and test together.
 
 Run:  uv run python -m linewerk.jobs.profile_time [--sample]
       --sample reads data/sample/<stem>_100k.csv (first 100k rows of each file).
@@ -12,6 +16,7 @@ Run:  uv run python -m linewerk.jobs.profile_time [--sample]
 
 import argparse
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from linewerk.config import DATA_DIR, RAW_DIR
@@ -23,6 +28,16 @@ DATE_FILE = "train_date.csv"
 SPREAD_FILES = ["train_date.csv", "test_date.csv"]
 SAMPLE_DIR = DATA_DIR / "sample"
 OFFSET = 1  # hypothesis from the source description: D = F + 1
+# Line 1: the only stations where max_spread was large; is it one outlier part or many?
+QUANTILE_STATIONS = [(1, 24), (1, 25)]
+QUANTILE_PROBS = [0.5, 0.95, 0.99]
+
+
+def timed[T](fn: Callable[[], T]) -> tuple[T, float]:
+    """Run fn and return (its result, wall-clock seconds)."""
+    start = time.perf_counter()
+    result = fn()
+    return result, time.perf_counter() - start
 
 
 def format_mapping_table(stations: list[StationNumbers], offset: int) -> str:
@@ -53,26 +68,68 @@ def format_spread_table(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def report_time_spread(date_path: Path) -> None:
-    """Single Spark pass over one date file."""
+def format_quantile_table(rows: list[dict], probs: list[float], span: float) -> str:
+    """Each quantile as 'value (share of span)', so the decision ratio is read directly."""
+    labels = [f"p{p * 100:g}" for p in probs]  # 0.5 -> p50, 0.95 -> p95
+    lines = [
+        f"| line | station | n_disagree | {' | '.join(labels)} |",
+        "|---:|---:|---:|" + "---:|" * len(probs),
+    ]
+    for r in rows:
+        if r["quantiles"] is None:  # the station's D columns never disagree
+            cells = ["-"] * len(probs)
+        else:
+            cells = [f"{q:.2f} ({q / span:.2%})" for q in r["quantiles"]]
+        lines.append(
+            f"| {r['line']} | {r['station']} | {r['n_disagree']:,} | {' | '.join(cells)} |"
+        )
+    return "\n".join(lines)
+
+
+def report_time_spread(date_path: Path) -> tuple[float, float]:
+    """Three Spark passes over one date file; returns its (min, max) D value."""
     # Lazy on purpose: linewerk.spark pulls in delta-spark, which Block 1 (headers only) does not need.
     from linewerk.ingest.schema import schema_for_file
-    from linewerk.quality.date_mapping import station_time_spread
+    from linewerk.quality.date_mapping import (
+        global_time_range,
+        spread_quantiles,
+        station_time_spread,
+    )
     from linewerk.spark import get_spark
 
     spark = get_spark("linewerk-profile-time")
     df = spark.read.csv(str(date_path), header=True, schema=schema_for_file(date_path))
-    start = time.perf_counter()
-    rows = [r.asDict() for r in station_time_spread(df).collect()]
-    elapsed = time.perf_counter() - start
 
-    print(f"\n## In-row D spread per station: {date_path.name}\n")
+    # The span comes first: the quantile table below is expressed as a share of it.
+    (lo, hi), t_range = timed(lambda: global_time_range(df))
+    span = hi - lo
+    rows, t_spread = timed(
+        lambda: [r.asDict() for r in station_time_spread(df).collect()]
+    )
+    q_rows, t_quant = timed(
+        lambda: [
+            r.asDict()
+            for r in spread_quantiles(df, QUANTILE_STATIONS, QUANTILE_PROBS).collect()
+        ]
+    )
+
+    print(f"\n## {date_path.name}\n")
+    print(f"time span over all D columns: {lo:.2f} .. {hi:.2f} (span {span:.2f})")
+
+    print("\n### In-row D spread per station\n")
     print(format_spread_table(rows))
     disagree = [r for r in rows if r["rows_hi_ne_lo"] > 0]
     print(
         f"\nstations where D columns disagree in some row: {len(disagree)} / {len(rows)}"
     )
-    print(f"aggregation + collect: {elapsed:.1f} s")
+
+    print("\n### Spread quantiles over rows where hi != lo, as value (share of span)\n")
+    print(format_quantile_table(q_rows, QUANTILE_PROBS, span))
+
+    print(
+        f"\nseconds: range {t_range:.1f}, spread {t_spread:.1f}, quantiles {t_quant:.1f}"
+    )
+    return lo, hi
 
 
 def report_mapping() -> None:
@@ -95,8 +152,15 @@ def spread_path(csv_name: str, sample: bool) -> Path:
 
 def main(sample: bool) -> None:
     report_mapping()
-    for name in SPREAD_FILES:
-        report_time_spread(spread_path(name, sample))
+    ranges = [report_time_spread(spread_path(name, sample)) for name in SPREAD_FILES]
+
+    # Train and test may sit on one shared time axis; if so, their spans overlap.
+    lo = min(r[0] for r in ranges)
+    hi = max(r[1] for r in ranges)
+    print(f"\n## {' + '.join(SPREAD_FILES)}\n")
+    for name, (f_lo, f_hi) in zip(SPREAD_FILES, ranges, strict=True):
+        print(f"{name}: {f_lo:.2f} .. {f_hi:.2f}")
+    print(f"together: {lo:.2f} .. {hi:.2f} (span {hi - lo:.2f})")
 
 
 if __name__ == "__main__":

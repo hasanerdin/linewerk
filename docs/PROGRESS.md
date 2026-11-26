@@ -5,9 +5,9 @@
 
 ## Current position
 
-- **Next session:** W1S4 — Data profiling (part 2): time and labels. Plan status: on track (W1S4 and W1F left this week)
+- **Next session:** W1F — Flex Day: retro + post #1 + W1S4 catch-up (time unit, labels, SPC bucket). Plan status: slightly behind (W1S4 half moved into W1F)
 - **Week:** 1 of 6 — Setup, Spark fundamentals, data profiling
-- **Plan status:** on track
+- **Plan status:** slightly behind
 - **Started:** 2026-11-20 · **Target finish:** ~2026-12-31 (may stretch to 7 weeks over Christmas)
 
 ## Milestones
@@ -32,6 +32,9 @@
 | Explicit schema vs inferSchema (train_numeric, read + count) | 1.77 s vs 5.64 s (~3.2×) | W1S2 |
 | Non-null measurements (= silver rows) | train 216,741,930 / test 216,694,404 / total 433,436,334 (18.9% of wide cells) | W1S3 |
 | Null count, 968 columns: single pass vs per-column loop | 15.0 s / 2 jobs vs ~24 min / ~1,936 jobs (loop measured on 20 columns, extrapolated) | W1S3 |
+| Time span (all D columns) | train 0.00 – 1718.48 / test 0.00 – 1718.49 (shared axis) | W1S4 |
+| Stations where all D values of a part are equal | 50 / 52 (exceptions L1 S24, S25) | W1S4 |
+| L1 in-station spread (rows where hi != lo) | S24 p50 0.03 / p99 0.14; S25 p50 0.12 / p95 13.4 / p99 19.1 (time units) | W1S4 |
 | Overall failure rate | — | — |
 | Silver build time | — | — |
 | Query speed-up after layout optimisation | — | — |
@@ -50,6 +53,7 @@
 - Reading physical plans in plain words: partial/final aggregate around one Exchange; broadcast join vs sort-merge join; hash partitioning (same key → same partition)
 - `df.count()` (action, returns a number) vs `df.groupBy().count()` (transformation, returns a DataFrame)
 - CSV column pruning: `count()` can skip parsing values; an aggregation over all columns cannot
+- Shuffle = new stage, not new job; post-shuffle aggregation runs in shuffle-partition many tasks, not one
 
 ## Parking lot
 
@@ -57,7 +61,6 @@
 
 - W5: spark.py master and config.py root detection both assume a local repo; add an env var override (e.g. LINEWERK_DATA_DIR) for Databricks
 - Verify that the two 476-byte part-00000 files in the smoke table are empty schema-only files (optional)
-- Why do date files compress 47× vs 7.5× for numeric? → check in W1S4 (timestamps constant per station?)
 - Convention: Kafka topic names use dots only, never underscores (metric name collision warning)
 - W5: branch protection on main — CI must pass before merge
 - W2S3: try spark.sql.shuffle.partitions lower than 200 for a 8-core laptop and measure
@@ -65,6 +68,10 @@
 - W2S1: CSV read mode for bronze — PERMISSIVE silently nulls malformed rows; consider FAILFAST or a corrupt-record column
 - W1F: roadmap and project description say "51 stations" — data has 52 station IDs (S0–S51); fix in the changelog
 - W2 (layout): L3 holds ~73% of filled cells — partitioning by line would be skewed; include this in the W2S3 benchmark
+- W2 silver build: compute row-level expressions once and combine aggregates into one agg; check in explain() whether subexpression elimination applies
+- global_time_range: use least/greatest over all D columns (2 expressions instead of 2,312; was the slowest pass, 32.7 s)
+- W2S4 quality check: assert all D values of a part are equal per station (except L1 S24/S25) — catches a clock change upstream
+- W1F changelog: W1S4 "first two decisions" wording is outdated (DECISIONS already at DEC-014)
 
 ## Open questions
 
@@ -73,6 +80,17 @@
 ---
 
 ## Session log
+
+### 2026-11-26 — W1S4 (part 1) — D ↔ F mapping and in-station timestamps
+- **Status:** partially done
+- **Done:** Feature branch `w1s4-time-labels`. `quality/date_mapping.py`: `numbers_by_station` (header-level F/D numbers per station, fail-fast on unknown and duplicate columns), `station_time_spread` (per-station in-row min/max of D columns, all 52 stations in one aggregation via struct array + explode), `spread_quantiles` (`percentile_approx` over rows where hi != lo), `global_time_range`; tests for all of them, incl. a quantile fixture that catches a missing hi != lo filter. `jobs/profile_time.py` with `--sample`, run on train and test date files. Results: `D = F + 1` fails for 790 / 1,156 D columns (holds in 12 / 52 stations); in 50 / 52 stations all D values of a part are identical; only L1 S24/S25 differ (S24 p99 0.14, S25 p95 13.4 / p99 19.1, max 285 / 312); train and test share one time axis (0.00 – 1718.48 / 1718.49); S42 visited by 15 (train) / 20 (test) parts, S46 by 1 / 0.
+- **Not done / moved:** Time-unit estimate, label distribution (overall and per line), SPC time-bucket decision, `profiling.md` time + label section, numeric ↔ date Id completeness check → W1F (catch-up).
+- **Learned:** A header naming rule is a hypothesis — test it against the data. If all timestamps of a part at a station are equal, the per-feature mapping stops mattering: one `part × station → ts` is enough. `max` is dominated by single outliers; quantiles over the non-zero rows show whether a difference matters. `F.least` / `F.greatest` work across columns within a row and skip nulls (and need at least 2 arguments); `F.min` / `F.max` aggregate across rows. One `least` over all columns replaces thousands of per-column `min` expressions.
+- **Struggled with:** Recall: said a shuffle creates a new job (it creates a new stage) and that the final aggregation runs in one task (it runs in shuffle-partition many tasks). Session ran past the planned 4 h.
+- **Decisions:** DEC-015
+- **Interview Q:** — (moved to W1F recall: unknown time units + limits from full train vs test replay)
+- **LinkedIn note:** The documented D = F + 1 rule failed for 790 of 1,156 timestamp columns — then one aggregation showed that in 50 of 52 stations every timestamp of a part is identical, so the mapping I was chasing didn't matter.
+- **Next:** W1F — Retro, LinkedIn post #1, catch-up on W1S4 (time unit, labels, SPC bucket, profiling.md)
 
 ### 2026-11-24 — W1S3 — Shape and sparsity
 - **Status:** done
